@@ -7,7 +7,7 @@ class MainController {
       const newUrl = await mainService.create(fullUrl);
       res.status(200).json({ newUrl });
     } catch (err) {
-      res.status(500).json({ err });
+      res.status(err.status).json({ message: err.message });
     }
   }
 
@@ -17,7 +17,7 @@ class MainController {
       const fullUrl = await mainService.get(shortUrl);
       res.status(200).redirect(fullUrl);
     } catch (err) {
-      res.status(500).json({ err });
+      res.status(err.status).json({ message: err.message });
     }
   }
 }

@@ -3,65 +3,121 @@ const prisma = new PrismaClient();
 const { nanoid } = require("nanoid");
 const Redis = require("ioredis");
 const redis = new Redis();
+const {
+  ValidationError,
+  NotFoundError,
+  DatabaseError,
+} = require("../utils/errors");
 
 class MainService {
-  //Up redis DB
-  async upRedis(shortUrl, url, created_at) {
-    const json_url = {
-      url,
-      created_at,
-    };
-    await redis.setex(shortUrl, 86400, JSON.stringify(json_url));
+  // Validate URL format
+  isValidUrl(url) {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  //Update redis DB
+  async updateRedisDB(shortUrl, id, url) {
+    try {
+      const json_data = {
+        id,
+        url,
+      };
+      await redis.setex(shortUrl, 86400, JSON.stringify(json_data));
+    } catch (err) {
+      throw new DatabaseError("Failed to update Redis");
+    }
+  }
+
+  //Update Postgres DB
+  async updatePostgresDB(id) {
+    try {
+      const dbUrl = await prisma.url.findUnique({ where: { id } });
+      if (!dbUrl) {
+        throw new NotFoundError("URL not found");
+      }
+      await prisma.url.update({
+        where: { id },
+        data: {
+          clicks: dbUrl.clicks + 1,
+          last_accessed: new Date(),
+        },
+      });
+    } catch (err) {
+      if (err instanceof NotFoundError) throw err;
+      throw new DatabaseError("Failed to update Postgres");
+    }
   }
 
   //Find in Postgres DB
   async findInPostgresDB(query, type) {
-    let dbUrl;
+    try {
+      let dbUrl;
+      if (type === "url") {
+        dbUrl = await prisma.url.findUnique({ where: { url: query } });
+      } else if (type === "shortUrl") {
+        dbUrl = await prisma.url.findFirst({ where: { shortUrl: query } });
+      }
 
-    if (type === "url") {
-      dbUrl = await prisma.url.findUnique({ where: { url: query } });
-    } else if (type === "shortUrl") {
-      dbUrl = await prisma.url.findFirst({ where: { shortUrl: query } });
+      if (dbUrl) {
+        await this.updateRedisDB(dbUrl.shortUrl, dbUrl.id, dbUrl.url);
+        if (type === "shortUrl") await this.updatePostgresDB(dbUrl.id);
+        return type === "url" ? dbUrl.shortUrl : dbUrl.url;
+      }
+
+      return null;
+    } catch (err) {
+      throw new DatabaseError("Failed to query database");
     }
-
-    if (dbUrl) {
-      await this.upRedis(dbUrl.shortUrl, dbUrl.url, dbUrl.created_at);
-      return type === "url" ? dbUrl.shortUrl : dbUrl.url;
-    }
-
-    return null;
   }
 
   async findShortUrlInDB(url) {
-    //find Redis DB
-    const keys = await redis.keys("*");
-    for (key of keys) {
-      const json_data = await redis.get(key);
-      const data = JSON.parse(json_data);
-      if (data.url === url) {
-        return key;
+    try {
+      //find Redis DB
+      const keys = await redis.keys("*");
+      for (const key of keys) {
+        const json_data = await redis.get(key);
+        const data = JSON.parse(json_data);
+        if (data.url === url) {
+          return key;
+        }
       }
-    }
 
-    //Find Postgres DB
-    const shortUrl = await this.findInPostgresDB(url, "url");
-    return shortUrl ? shortUrl : null;
+      //Find Postgres DB
+      const shortUrl = await this.findInPostgresDB(url, "url");
+      return shortUrl || null;
+    } catch (err) {
+      throw new NotFoundError("Failed to find shortUrl");
+    }
   }
 
   async findUrlInDB(shortUrl) {
-    //find Redis DB
-    const rUrl = await redis.get(shortUrl);
-    if (rUrl) {
-      const data = JSON.parse(rUrl);
-      return data.url;
-    }
+    try {
+      //find Redis DB
+      let url = await redis.get(shortUrl);
+      if (url) {
+        const data = JSON.parse(url);
+        this.updatePostgresDB(data.id);
+        return data.url;
+      }
 
-    //Find Postgres DB
-    const url = await this.findInPostgresDB(shortUrl, "shortUrl");
-    return url ? url : null;
+      //Find Postgres DB
+      url = await this.findInPostgresDB(shortUrl, "shortUrl");
+      return url || null;
+    } catch (err) {
+      throw new NotFoundError("Failed to find Url");
+    }
   }
 
   async create(url) {
+    if (!this.isValidUrl(url)) {
+      throw new ValidationError("Invalid URL format");
+    }
+
     let shortUrl = await this.findShortUrlInDB(url);
 
     if (shortUrl !== null) {
@@ -70,23 +126,26 @@ class MainService {
 
     shortUrl = nanoid(7);
 
-    await this.upRedis(shortUrl, url, Date.now());
+    try {
+      const newUrl = await prisma.url.create({
+        data: {
+          url,
+          shortUrl,
+        },
+      });
 
-    await prisma.url.create({
-      data: {
-        url,
-        shortUrl,
-      },
-    });
-
-    return `localhost:5000/shorten/${shortUrl}`;
+      await this.updateRedisDB(shortUrl, newUrl.id, url);
+      return `localhost:5000/shorten/${shortUrl}`;
+    } catch (err) {
+      throw new DatabaseError("Failed to create URL");
+    }
   }
 
   async get(shortUrl) {
     let url = await this.findUrlInDB(shortUrl);
 
     if (url === null) {
-      throw new Error("Url not found");
+      throw new NotFoundError("URL not found");
     }
 
     return url;

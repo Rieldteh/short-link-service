@@ -1,11 +1,13 @@
 -- CreateTable
 CREATE TABLE "Url" (
-    "Id" SERIAL NOT NULL,
+    "id" SERIAL NOT NULL,
     "url" TEXT NOT NULL,
     "shortUrl" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "clicks" INTEGER NOT NULL DEFAULT 0,
+    "last_accessed" TIMESTAMP(3),
 
-    CONSTRAINT "Url_pkey" PRIMARY KEY ("Id")
+    CONSTRAINT "Url_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex

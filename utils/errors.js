@@ -24,6 +24,7 @@ class DatabaseError extends AppError {
 }
 
 module.exports = {
+  AppError,
   ValidationError,
   NotFoundError,
   DatabaseError,

@@ -27,6 +27,7 @@ class MainService {
         id,
         url,
       };
+
       await redis.setex(shortUrl, 86400, JSON.stringify(json_data));
     } catch (err) {
       throw new DatabaseError("Failed to update Redis");
@@ -37,9 +38,11 @@ class MainService {
   async updatePostgresDB(id) {
     try {
       const dbUrl = await prisma.url.findUnique({ where: { id } });
+
       if (!dbUrl) {
         throw new NotFoundError("URL not found");
       }
+
       await prisma.url.update({
         where: { id },
         data: {
@@ -88,8 +91,7 @@ class MainService {
       }
 
       //Find Postgres DB
-      const shortUrl = await this.findInPostgresDB(url, "url");
-      return shortUrl || null;
+      return await this.findInPostgresDB(url, "url");
     } catch (err) {
       throw new NotFoundError("Failed to find shortUrl");
     }
@@ -106,8 +108,7 @@ class MainService {
       }
 
       //Find Postgres DB
-      url = await this.findInPostgresDB(shortUrl, "shortUrl");
-      return url || null;
+      return await this.findInPostgresDB(shortUrl, "shortUrl");
     } catch (err) {
       throw new NotFoundError("Failed to find Url");
     }
@@ -121,7 +122,7 @@ class MainService {
     let shortUrl = await this.findShortUrlInDB(url);
 
     if (shortUrl !== null) {
-      return `localhost:5000/shorten/${shortUrl}`;
+      return shortUrl;
     }
 
     shortUrl = nanoid(7);
@@ -135,7 +136,7 @@ class MainService {
       });
 
       await this.updateRedisDB(shortUrl, newUrl.id, url);
-      return `localhost:5000/shorten/${shortUrl}`;
+      return shortUrl;
     } catch (err) {
       throw new DatabaseError("Failed to create URL");
     }

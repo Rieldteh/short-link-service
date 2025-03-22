@@ -11,7 +11,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-app.use("/shorten", mainRouter);
+app.use("/", mainRouter);
 app.use("/info", infoRouter);
 
 app.listen(PORT, () => {

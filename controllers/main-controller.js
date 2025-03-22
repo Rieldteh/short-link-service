@@ -1,4 +1,5 @@
 const mainService = require("../services/main-service");
+const { AppError } = require("../utils/errors");
 
 class MainController {
   async create(req, res, next) {
@@ -7,7 +8,10 @@ class MainController {
       const newUrl = await mainService.create(fullUrl);
       res.status(200).json({ newUrl });
     } catch (err) {
-      res.status(err.status).json({ message: err.message });
+      if (err instanceof AppError)
+        res.status(err.status).json({ message: err.message });
+      else
+        res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -17,7 +21,10 @@ class MainController {
       const fullUrl = await mainService.get(shortUrl);
       res.status(200).redirect(fullUrl);
     } catch (err) {
-      res.status(err.status).json({ message: err.message });
+      if (err instanceof AppError)
+        res.status(err.status).json({ message: err.message });
+      else
+        res.status(500).json({ message: "Internal server error" });
     }
   }
 }

@@ -1,4 +1,5 @@
 const infoService = require("../services/info-service");
+const { AppError } = require("../utils/errors");
 
 class InfoController {
   async getInfo(req, res, next) {
@@ -7,7 +8,10 @@ class InfoController {
       const info = await infoService.getInfo(shortUrl);
       res.status(200).json({ info });
     } catch (err) {
-      res.status(err.status).json({ err: err.message });
+      if (err instanceof AppError)
+        res.status(err.status).json({ err: err.message });
+      else
+        res.status(500).json({ message: "Internal server error" });
     }
   }
 
@@ -17,7 +21,10 @@ class InfoController {
       const popular = await infoService.getPopular(limit);
       res.status(200).json({ popular });
     } catch (err) {
-      res.status(err.status).json({ err: err.message });
+      if (err instanceof AppError)
+        res.status(err.status).json({ err: err.message });
+      else
+        res.status(500).json({ message: "Internal server error" });
     }
   }
 }
